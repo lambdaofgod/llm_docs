@@ -26,14 +26,107 @@ embedding
 #+BEGIN_SRC python :session querying.org  :exports both
 import chromadb
 
-chroma_settings = chromadb.config.Settings(persist_directory="./vectordb")
+chroma_settings = chromadb.config.Settings(persist_directory="vectordb", chroma_db_impl="duckdb+parquet")
 client = chromadb.Client(chroma_settings)
 #+END_SRC
 
 #+RESULTS:
 
 #+BEGIN_SRC python :session querying.org  :exports both
-client.list_collections()
+vectordb = Chroma(collection_name="text_generation_webui", embedding_function=embedding, client_settings=chroma_settings)
 #+END_SRC
 
 #+RESULTS:
+
+#+BEGIN_SRC python :session querying.org  :exports both :results output
+for doc in (vectordb.similarity_search("")):
+    print(doc.page_content)
+    print("#" * 50)
+#+END_SRC
+
+#+RESULTS:
+#+begin_example
+Batches:   0%|                                                                                                        | 0/1 [00:00<?, ?it/s]Batches: 100%|████████████████████████████████████████████████████████████████████████████████████████████████| 1/1 [00:00<00:00, 32.72it/s]
+DEBUG:Chroma:time to pre process our knn query: 9.5367431640625e-07
+DEBUG:Chroma:time to run knn query: 4.2438507080078125e-05
+import sys
+
+from pathlib import Path
+
+import accelerate
+
+import torch
+
+import modules.shared as shared
+
+sys.path.insert(0, str(Path("repositories/GPTQ-for-LLaMa")))
+
+import llama
+
+import opt
+
+def load_quantized(model_name):
+
+if not shared.args.gptq_model_type:
+
+# Try to determine model type from model name
+
+model_type = model_name.split('-')[0].lower()
+
+if model_type not in ('llama', 'opt'):
+
+print("Can't determine model type from model name. Please specify it manually using --gptq-model-type "
+
+"argument")
+##################################################
+#restore_torch_init()
+
+tokenizer = AutoTokenizer.from_pretrained(path)
+
+out_folder = Path(f"models/{model_name}-np")
+
+if not Path(out_folder).exists():
+
+os.mkdir(out_folder)
+
+print(f"Saving the converted model to {out_folder}...")
+
+for name, param in tqdm(list(model.model.named_parameters())):
+
+name = name.replace("decoder.final_layer_norm", "decoder.layer_norm")
+
+param_path = os.path.join(out_folder, name)
+
+with open(param_path, "wb") as f:
+
+np.save(f, param.cpu().detach().numpy())
+##################################################
+model,
+
+dtype=torch.int8,
+
+max_memory=params['max_memory'],
+
+no_split_module_classes = model._no_split_modules
+
+)
+
+model = AutoModelForCausalLM.from_pretrained(checkpoint, **params)
+
+# Loading the tokenizer
+
+if shared.model_name.lower().startswith(('gpt4chan', 'gpt-4chan', '4chan')) and Path("models/gpt-j-6B/").exists():
+
+tokenizer = AutoTokenizer.from_pretrained(Path("models/gpt-j-6B/"))
+
+else:
+
+tokenizer = AutoTokenizer.from_pretrained(Path(f"models/{shared.model_name}/"))
+##################################################
+parser.add_argument('--gptq-model-type', type=str, help='Model type of pre-quantized model. Currently only LLaMa and OPT are supported.')
+
+parser.add_argument('--bf16', action='store_true', help='Load the model with bfloat16 precision. Requires NVIDIA Ampere GPU.')
+
+parser.add_argument('--auto-devices', action='store_true', help='Automatically split the model across the available GPU(s) and CPU.')
+##################################################
+#+end_example

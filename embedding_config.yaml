@@ -1,0 +1,2 @@
+embedding_model_name: "sentence-transformers/all-mpnet-base-v2"
+timeout: 60

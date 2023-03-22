@@ -13,24 +13,37 @@ import tqdm
 
 import logging
 import fire
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 import pandas as pd
 import tiktoken
 from dataclasses import dataclass
-from typing import List
+from typing import List, Optional
 import os
-from langchain.document_loaders import ReadTheDocsLoader
+from langchain.document_loaders import ReadTheDocsLoader, DirectoryLoader
 
 
 logging.basicConfig(level="INFO")
 
-supported_loader_types = ["rtdocs", "html"]
+supported_loader_types = ["rtdocs", "html", "text_files"]
+
+from pydantic import BaseModel, Field
+
+
+import yaml
+from pydantic import BaseModel, Field
+
+
+def load_model_from_yaml(base_model_cls, yaml_path):
+    with open(yaml_path) as f:
+        raw_obj = yaml.safe_load(f)
+    return base_model_cls.parse_obj(raw_obj)
 
 
 class LoaderConfig(BaseModel):
 
     path: str
     loader_type: str
+    glob_pattern: str = Field(default="**/*")
 
     def get_index_name(self):
         return f"{P(self.path).name}-{self.loader_type}"
@@ -48,7 +61,7 @@ def load_html_docs(path):
         yield doc
 
 
-def load_raw_docs(path, loader_type: str = "rtdocs"):
+def load_raw_docs(path, loader_type: str = "rtdocs", glob_pattern="**/*"):
     """
     TODO: what is actual return type? Is this list by default or
     """
@@ -57,6 +70,8 @@ def load_raw_docs(path, loader_type: str = "rtdocs"):
         return ReadTheDocsLoader(path).load()
     elif loader_type == "html":
         return load_html_docs(path)
+    elif loader_type == "text_files":
+        return DirectoryLoader(path, glob=glob_pattern).load()
 
 
 # langchain_loader = ReadTheDocsLoader("rtdocs/langchain.readthedocs.io/en/latest/")
@@ -106,7 +121,7 @@ def preprocess_docs(
 
 class PersistenceConfig(BaseModel):
     persist_directory: str
-    collection_name: str
+    collection_name: Optional[str]
 
 
 from time import perf_counter
@@ -126,27 +141,31 @@ class DocStoreBuilder(BaseModel):
     embedding_config: EmbeddingConfig
 
     def make_doc_store_from_documents(
-        self, documents, collection_name, persist_directory
+        self, documents, collection_name, persistence_config
     ):
         embeddings = self.embedding_config.load_embeddings()
         with catchtime():
             doc_store = Chroma.from_documents(
                 self.filter_texts(documents),
                 embeddings,
-                collection_name=collection_name,
-                persist_directory=persist_directory,
+                collection_name=persistence_config.collection_name,
+                persist_directory=persistence_config.persist_directory,
             )
         return doc_store
 
     def setup_doc_store(
         self, loader_config: LoaderConfig, persistence_config: PersistenceConfig
     ):
-        raw_docs = load_raw_docs(loader_config.path)
+        raw_docs = load_raw_docs(
+            loader_config.path,
+            loader_config.loader_type,
+            glob_pattern=loader_config.glob_pattern,
+        )
         docs = preprocess_docs(raw_docs, self.preprocessing_config)
         return self.make_doc_store_from_documents(
             docs,
             collection_name=persistence_config.collection_name,
-            persist_directory=persistence_config.persist_directory,
+            persistence_config=persistence_config,
         )
 
     def get_doc_store(
@@ -162,7 +181,7 @@ class DocStoreBuilder(BaseModel):
     #     return loader_config.get_index_name() in qdrant_client.get_collections()
 
     def filter_texts(self, documents):
-        return [doc for doc in documents][:1000]
+        return [doc for doc in documents]
 
 
 class Main:
@@ -170,20 +189,28 @@ class Main:
     def index_with_chroma(
         path,
         loader_type,
+        glob_pattern=None,
         collection_name=None,
-        persist_directory="./vectordb",
-        embedding_config: EmbeddingConfig = EmbeddingConfig.get_default(),
-        preprocessing_config: PreprocessingConfig = PreprocessingConfig.get_default(),
+        persist_directory="vectordb",
+        embedding_config_path: str = "embedding_config.yaml",
+        preprocessing_config_path: str = "preprocessing_config.yaml",
     ):
+        embedding_config = load_model_from_yaml(EmbeddingConfig, embedding_config_path)
+        preprocessing_config = load_model_from_yaml(
+            PreprocessingConfig, preprocessing_config_path
+        )
+        loader_config = LoaderConfig(
+            path=path, loader_type=loader_type, glob_pattern=glob_pattern or "**/*"
+        )
         persistence_settings = PersistenceConfig(
-            collection_name=collection_name, persist_directory=persist_directory
+            collection_name=collection_name or loader_config.get_index_name(),
+            persist_directory=persist_directory,
         )
         builder = DocStoreBuilder(
             embedding_config=embedding_config,
             preprocessing_config=preprocessing_config,
-            persist_directory=persist_directory,
+            persistence_config=persistence_settings,
         )
-        loader_config = LoaderConfig(path=path, loader_type=loader_type)
         logging.info(f"loader config{loader_config.get_index_name()}")
         # if builder.check_if_exists(loader_config):
         #     logging.info("skipping building, {loader_config.get_index_name()} exists")
