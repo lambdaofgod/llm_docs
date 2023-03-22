@@ -1,0 +1,10 @@
+-e git+https://github.com/chroma-core/chroma@2ada82bc467773c111da8b90e3fd11a446c881f0#egg=chromadb
+qdrant-client==1.0.1
+hy-language-server==0.0.6
+jedi-language-server==0.35.1
+langchain==0.0.113
+langcodes==3.3.0
+langdetect==1.0.9
+language-selector==0.1
+libclang==13.0.0
+python-language-server==0.36.2

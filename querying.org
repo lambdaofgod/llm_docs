@@ -1,0 +1,39 @@
+#+title: Querying
+
+
+#+BEGIN_SRC python :session querying.org  :exports both
+from langchain.vectorstores import Chroma
+import indexing
+
+embedding = indexing.EmbeddingConfig.get_default().load_embeddings()
+embedding
+#+END_SRC
+
+#+RESULTS:
+: client=SentenceTransformer(
+:   (0): Transformer({'max_seq_length': 384, 'do_lower_case': False}) with Transformer model: MPNetModel
+:   (1): Pooling({'word_embedding_dimension': 768, 'pooling_mode_cls_token': False, 'pooling_mode_mean_tokens': True, 'pooling_mode_max_tokens': False, 'pooling_mode_mean_sqrt_len_tokens': False})
+:   (2): Normalize()
+: ) model_name='sentence-transformers/all-mpnet-base-v2'
+
+#+BEGIN_SRC python :session querying.org  :exports both
+#db = Chroma(persist_directory="vectordb",embedding_function=embedding, collection_name="langchain_rtdocs")
+#+END_SRC
+
+#+RESULTS:
+
+
+#+BEGIN_SRC python :session querying.org  :exports both
+import chromadb
+
+chroma_settings = chromadb.config.Settings(persist_directory="./vectordb")
+client = chromadb.Client(chroma_settings)
+#+END_SRC
+
+#+RESULTS:
+
+#+BEGIN_SRC python :session querying.org  :exports both
+client.list_collections()
+#+END_SRC
+
+#+RESULTS:
