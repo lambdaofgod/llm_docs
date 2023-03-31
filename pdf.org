@@ -1,0 +1,68 @@
+#+title: Pdf
+
+
+
+#+BEGIN_SRC python :session pdf.org  :exports both
+import qdrant_client
+from langchain.chains import VectorDBQA
+from langchain.vectorstores import Qdrant
+
+"qdrant"
+#+END_SRC
+
+#+RESULTS:
+: qdrant
+
+
+#+BEGIN_SRC python :session pdf.org  :exports both
+from configs import load_model_from_yaml, EmbeddingConfig
+import qdrant_client
+
+
+embedding_config = load_model_from_yaml(EmbeddingConfig, "conf/embedding_config.yaml")
+embedding_model = embedding_config.load_embeddings()
+
+def get_qdrant_doc_store_from_disk(path, embedding_model):
+    qdrant = qdrant_client.QdrantClient(path=path)
+    collection_names = list(qdrant._client.collections)
+    assert len(list(collection_names)) == 1, str(collection_names)
+    collection_name = collection_names[0]
+    return Qdrant(qdrant, collection_name, embedding_model)
+
+path = "vectordb/qdrant/rasa_book"
+#qdrant_store = get_qdrant_doc_store_from_disk(path, embedding_model)
+#+END_SRC
+
+#+RESULTS:
+
+#+BEGIN_SRC python :session pdf.org  :exports both
+vectorstore = get_qdrant_doc_store_from_disk(path, embedding_model)
+#+END_SRC
+
+#+RESULTS:
+
+#+BEGIN_SRC python :session pdf.org  :exports both
+from langchain import VectorDBQA, OpenAI
+api_key_path = '~/.keys/openai_key.txt' # specify file path if OPENAI_API_KEY is not in env
+llm = OpenAI(openai_api_key=api_key_path)
+
+qa = VectorDBQAWithSources.from_chain_type(
+    llm=llm,
+    chain_type="stuff",
+    vectorstore=vectorstore,
+    return_source_documents=True,
+)
+"qa"
+#+END_SRC
+
+#+RESULTS:
+: qa
+
+#+BEGIN_SRC python :session pdf.org  :exports both
+qa.run("How does Rasa compare to other chatbot frameworks?")
+len(qa.output_keys)
+#+END_SRC
+
+#+RESULTS:
+
+[[id:785de6c2-47e6-46f5-aab6-f2133389bbc6][python/qdrant]]

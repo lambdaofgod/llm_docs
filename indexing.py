@@ -1,6 +1,7 @@
 import logging
 import os
 import re
+import shutil
 from contextlib import contextmanager
 from dataclasses import dataclass
 from itertools import islice
@@ -10,6 +11,7 @@ from typing import List, Optional
 
 import fire
 import pandas as pd
+import qdrant_client
 import tiktoken
 import tqdm
 import yaml
@@ -36,12 +38,6 @@ from configs import (
 logging.basicConfig(level="INFO")
 
 supported_loader_types = ["rtdocs", "html", "text_files", "pdf"]
-
-
-def load_model_from_yaml(base_model_cls, yaml_path):
-    with open(yaml_path) as f:
-        raw_obj = yaml.safe_load(f)
-    return base_model_cls.parse_obj(raw_obj)
 
 
 def strip_html_whitespaces(html_str):
@@ -130,17 +126,34 @@ class DocStoreBuilder(BaseModel):
             )
         return doc_store
 
+    def _update_qdrant_alias(self, qdrant_path, collection_name):
+        qdrant = qdrant_client.QdrantClient(qdrant_path)
+        old_collection_name = list(qdrant._client.collections)[0]
+        collection_schema = qdrant.describe_collection(collection_name)
+        collection_schema["alias"] = collection_name
+
     def _make_qdrant_doc_store(
         self, documents, embeddings, collection_name, persistence_config
     ):
         with catchtime():
+            qdrant_path = (
+                P(persistence_config.persist_directory)
+                / "qdrant"
+                / persistence_config.collection_name
+            )
+            if qdrant_path.exists():
+                logging.info(
+                    f"index persistence path exist, removing {str(qdrant_path)}"
+                )
+                shutil.rmtree(qdrant_path)
+            qdrant_path.mkdir(parents=True)
             doc_store = Qdrant.from_documents(
                 self.filter_texts(documents),
                 embeddings,
-                collection_name=persistence_config.collection_name,
-                path=P(persistence_config.persist_directory) / "qdrant.db",
+                path=qdrant_path,
             )
-        return doc_store
+            self._update_qdrant_alias(collection_name, qdrant_path)
+            return doc_store
 
     def setup_doc_store(
         self, loader_config: LoaderConfig, persistence_config: PersistenceConfig
