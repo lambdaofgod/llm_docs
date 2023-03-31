@@ -1,0 +1,2 @@
+index_type: qdrant
+persist_directory: vectordb
