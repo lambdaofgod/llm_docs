@@ -18,7 +18,7 @@ import yaml
 from langchain.chains import VectorDBQA
 from langchain.document_loaders import (
     DirectoryLoader,
-    PyPDFLoader,
+    PDFMinerLoader,
     ReadTheDocsLoader,
     UnstructuredHTMLLoader,
 )
@@ -27,13 +27,14 @@ from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.vectorstores import Chroma, Qdrant
 from pydantic import BaseModel, Field
 
-import index_utils
 from configs import (
     EmbeddingConfig,
     LoaderConfig,
     PersistenceConfig,
     PreprocessingConfig,
+    load_model_from_yaml,
 )
+from index_utils import update_qdrant_alias
 
 logging.basicConfig(level="INFO")
 
@@ -64,7 +65,7 @@ def load_raw_docs(path, loader_type: str = "rtdocs", glob_pattern="**/*"):
     elif loader_type == "text_files":
         return DirectoryLoader(path, glob=glob_pattern).load()
     elif loader_type == "pdf":
-        return PyPDFLoader(path).load()
+        return PDFMinerLoader(path).load()
 
 
 # langchain_loader = ReadTheDocsLoader("rtdocs/langchain.readthedocs.io/en/latest/")
@@ -126,12 +127,6 @@ class DocStoreBuilder(BaseModel):
             )
         return doc_store
 
-    def _update_qdrant_alias(self, qdrant_path, collection_name):
-        qdrant = qdrant_client.QdrantClient(qdrant_path)
-        old_collection_name = list(qdrant._client.collections)[0]
-        collection_schema = qdrant.describe_collection(collection_name)
-        collection_schema["alias"] = collection_name
-
     def _make_qdrant_doc_store(
         self, documents, embeddings, collection_name, persistence_config
     ):
@@ -150,9 +145,10 @@ class DocStoreBuilder(BaseModel):
             doc_store = Qdrant.from_documents(
                 self.filter_texts(documents),
                 embeddings,
-                path=qdrant_path,
+                distance_func=persistence_config.distance_func,
+                path=str(qdrant_path),
             )
-            self._update_qdrant_alias(collection_name, qdrant_path)
+            update_qdrant_alias(doc_store.client, collection_name)
             return doc_store
 
     def setup_doc_store(

@@ -51,3 +51,4 @@ class PersistenceConfig(BaseModel):
     index_type: str
     persist_directory: str
     collection_name: Optional[str]
+    distance_func: str
