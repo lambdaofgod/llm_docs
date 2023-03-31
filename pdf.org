@@ -27,11 +27,11 @@ def get_qdrant_doc_store_from_disk(path, embedding_model):
     collection_names = list(qdrant._client.collections)
     assert len(list(collection_names)) == 1, str(collection_names)
     collection_name = collection_names[0]
-    return Qdrant(qdrant, collection_name, embedding_model)
+    return Qdrant(qdrant, collection_name=collection_name, embedding_function=embedding_model.embed_query)
 
 path = "vectordb/qdrant/rasa_book"
 #qdrant_store = get_qdrant_doc_store_from_disk(path, embedding_model)
-#+END_SRC
+#+END_SRembed_documents
 
 #+RESULTS:
 
@@ -42,11 +42,21 @@ vectorstore = get_qdrant_doc_store_from_disk(path, embedding_model)
 #+RESULTS:
 
 #+BEGIN_SRC python :session pdf.org  :exports both
-from langchain import VectorDBQA, OpenAI
-api_key_path = '~/.keys/openai_key.txt' # specify file path if OPENAI_API_KEY is not in env
-llm = OpenAI(openai_api_key=api_key_path)
+vectorstore.similarity_search("How to Rasa")
+#+END_SRC
 
-qa = VectorDBQAWithSources.from_chain_type(
+#+RESULTS:
+| Document | (page_content= not easy, you should now consider yourself an expert in Rasa. All we can say is thank you \nvery much for reading! metadata= (source : docs/Conversational_AI_with_Rasa.pdf page : 248)) | Document | (page_content= Base Actions to Handle Question Answering .\nIf you are using the digital version of this book, we advise you to type the code yourself \nor access the code from the book’s GitHub repository (a link is available in the next \nsection). \nThe versions of Rasa change quickly, and the related knowledge base and documents are \nalso rapidly updated. We recommend that you frequently read Rasa’s documentation to \nunderstand the changes.\nDownload the example code files metadata= (source : docs/Conversational_AI_with_Rasa.pdf page : 15)) | Document | (page_content= serve Rasa NLU.\nTraining and running Rasa NLU\nRasa is a very cohesive  framework. We can use the built-in command-line tools of Rasa \nthat we already introduced in the first chapter to perform tasks such as model training and \nprediction.\nLet's start with model training.\nTraining our models\nWe can start training models after we have configured the pipeline and got the training \ndata. Rasa provides developers with commands that can help us train a model quickly. As metadata= (source : docs/Conversational_AI_with_Rasa.pdf page : 69)) | Document | (page_content= interview_paperwork  and faq/interview_result ).\nIn the next step, we will configure Rasa so that it can perform the functions we want. metadata= (source : docs/Conversational_AI_with_Rasa.pdf page : 140)) |
+
+#+BEGIN_SRC python :session pdf.org  :exports both
+from langchain import VectorDBQA, OpenAI
+from pathlib import Path
+api_key_path = Path('~/.keys/openai_key.txt').expanduser() # specify file path if OPENAI_API_KEY is not in env
+with open(api_key_path) as f:
+    api_key = f.read().strip()
+llm = OpenAI(openai_api_key=api_key)
+
+qa = VectorDBQA.from_chain_type(
     llm=llm,
     chain_type="stuff",
     vectorstore=vectorstore,
@@ -60,9 +70,16 @@ qa = VectorDBQAWithSources.from_chain_type(
 
 #+BEGIN_SRC python :session pdf.org  :exports both
 qa.run("How does Rasa compare to other chatbot frameworks?")
-len(qa.output_keys)
 #+END_SRC
 
 #+RESULTS:
+:  Rasa has advantages over other chatbot frameworks, such as built-in enterprise-grade concurrency capabilities, rich functions covering all the needs of chatbots, rich documents and tutorials, and a huge global community. This is why the Rasa framework ranks first in the number of stars on GitHub among all chatbot frameworks.
+
+#+BEGIN_SRC python :session pdf.org  :exports both
+qa._get_docs("How does Rasa compare to other chatbot frameworks?")
+#+END_SRC
+
+#+RESULTS:
+| Document | (page_content= Why Rasa?\nThere are many options for building chatbots. These solutions can be divided into two \ntypes: closed source solutions and open source solutions. Closed source solutions have \ndisadvantages of high cost, vendor lock-in, risk of data leakage, and the inability to \nimplement custom functions. Open source solutions do not have these problems. A \ndisadvantage of open source solutions is that users need to carefully choose a good chatbot metadata= (source : docs/Conversational_AI_with_Rasa.pdf page : 43)) | Document | (page_content= framework: this should have large-scale concurrency and powerful functions, be easy to \nlearn, and have an active community. Rasa has all these features: built-in enterprise-grade \nconcurrency capabilities, rich functions covering all the needs of chatbots, rich documents \nand tutorials, and a huge global community. This is why the Rasa framework ranks first \nin the number of stars on GitHub among all chatbot frameworks. Many companies have \nsuccessfully built their own chatbots using Rasa. metadata= (source : docs/Conversational_AI_with_Rasa.pdf page : 43)) | Document | (page_content= 16     Introduction to Chatbots and the Rasa Framework\nChatbot basics\nA chatbot is a software system that is used to have a conversation with people via text or \nspeech. Chatbots are used for various purposes, including customer service, enterprise \noperations, and healthcare. According to the different goals, chatbots have two main \ntypes: task-oriented bots and chitchat bots. Task-oriented bots have the goal of finishing metadata= (source : docs/Conversational_AI_with_Rasa.pdf page : 34)) | Document | (page_content= 26     Introduction to Chatbots and the Rasa Framework\nAre you curious about how these powerful features of the Rasa framework are \nimplemented? In the next chapter, we will introduce the architecture of Rasa.\nSystem architecture\nRasa contains two main parts—namely, Rasa  and the Rasa software development kit  \n(Rasa SDK ). Within Rasa, there are also NLU  and Core .\nRasa NLU converts  a user's input into intents and entities. This is known as NLU. metadata= (source : docs/Conversational_AI_with_Rasa.pdf page : 44)) |
 
 [[id:785de6c2-47e6-46f5-aab6-f2133389bbc6][python/qdrant]]
