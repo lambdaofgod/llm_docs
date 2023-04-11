@@ -39,94 +39,92 @@ vectordb = Chroma(collection_name="text_generation_webui", embedding_function=em
 #+RESULTS:
 
 #+BEGIN_SRC python :session querying.org  :exports both :results output
-for doc in (vectordb.similarity_search("")):
+for doc in (vectordb.similarity_search("generate from prompt")):
     print(doc.page_content)
     print("#" * 50)
 #+END_SRC
 
 #+RESULTS:
 #+begin_example
-Batches:   0%|                                                                                                        | 0/1 [00:00<?, ?it/s]Batches: 100%|████████████████████████████████████████████████████████████████████████████████████████████████| 1/1 [00:00<00:00, 32.72it/s]
+Batches:   0%|                                                                                                        | 0/1 [00:00<?, ?it/s]Batches: 100%|████████████████████████████████████████████████████████████████████████████████████████████████| 1/1 [00:00<00:00, 50.56it/s]
 DEBUG:Chroma:time to pre process our knn query: 9.5367431640625e-07
-DEBUG:Chroma:time to run knn query: 4.2438507080078125e-05
-import sys
-
-from pathlib import Path
-
-import accelerate
-
-import torch
-
-import modules.shared as shared
-
-sys.path.insert(0, str(Path("repositories/GPTQ-for-LLaMa")))
-
-import llama
-
-import opt
-
-def load_quantized(model_name):
-
-if not shared.args.gptq_model_type:
-
-# Try to determine model type from model name
-
-model_type = model_name.split('-')[0].lower()
-
-if model_type not in ('llama', 'opt'):
-
-print("Can't determine model type from model name. Please specify it manually using --gptq-model-type "
-
-"argument")
-##################################################
-#restore_torch_init()
-
-tokenizer = AutoTokenizer.from_pretrained(path)
-
-out_folder = Path(f"models/{model_name}-np")
-
-if not Path(out_folder).exists():
-
-os.mkdir(out_folder)
-
-print(f"Saving the converted model to {out_folder}...")
-
-for name, param in tqdm(list(model.model.named_parameters())):
-
-name = name.replace("decoder.final_layer_norm", "decoder.layer_norm")
-
-param_path = os.path.join(out_folder, name)
-
-with open(param_path, "wb") as f:
-
-np.save(f, param.cpu().detach().numpy())
-##################################################
-model,
-
-dtype=torch.int8,
-
-max_memory=params['max_memory'],
-
-no_split_module_classes = model._no_split_modules
-
-)
-
-model = AutoModelForCausalLM.from_pretrained(checkpoint, **params)
-
-# Loading the tokenizer
-
-if shared.model_name.lower().startswith(('gpt4chan', 'gpt-4chan', '4chan')) and Path("models/gpt-j-6B/").exists():
-
-tokenizer = AutoTokenizer.from_pretrained(Path("models/gpt-j-6B/"))
-
+DEBUG:Chroma:time to run knn query: 6.794929504394531e-05
 else:
 
-tokenizer = AutoTokenizer.from_pretrained(Path(f"models/{shared.model_name}/"))
+prompt = custom_generate_chat_prompt(text, max_new_tokens, name1, name2, context, chat_prompt_size)
+
+# Yield *Is typing...*
+
+if not regenerate:
+
+yield shared.history['visible']+[[visible_text, shared.processing_message]]
+
+# Generate
+
+reply = ''
+
+for i in range(chat_generation_attempts):
 ##################################################
-parser.add_argument('--gptq-model-type', type=str, help='Model type of pre-quantized model. Currently only LLaMa and OPT are supported.')
+max_context = body.get('max_context_length', 2048)
 
-parser.add_argument('--bf16', action='store_true', help='Load the model with bfloat16 precision. Requires NVIDIA Ampere GPU.')
+while len(prompt_lines) >= 0 and len(encode('\n'.join(prompt_lines))) > max_context:
 
-parser.add_argument('--auto-devices', action='store_true', help='Automatically split the model across the available GPU(s) and CPU.')
+prompt_lines.pop(0)
+
+prompt = '\n'.join(prompt_lines)
+
+generator = generate_reply(
+
+question = prompt,
+
+max_new_tokens = body.get('max_length', 200),
+
+do_sample=True,
+
+temperature=body.get('temperature', 0.5),
+
+top_p=body.get('top_p', 1),
+
+typical_p=body.get('typical', 1),
+
+repetition_penalty=body.get('rep_pen', 1.1),
+
+encoder_repetition_penalty=1,
+##################################################
+result = self()
+
+result.pipeline = pipeline
+
+return result
+
+def generate(self, context="", token_count=20, temperature=1, top_p=1, top_k=50, alpha_frequency=0.1, alpha_presence=0.1, token_ban=[0], token_stop=[], callback=None):
+
+args = PIPELINE_ARGS(
+
+temperature = temperature,
+
+top_p = top_p,
+
+top_k = top_k,
+
+alpha_frequency = alpha_frequency, # Frequency Penalty (as in GPT-3)
+
+alpha_presence = alpha_presence, # Presence Penalty (as in GPT-3)
+
+token_ban = token_ban, # ban the generation of some tokens
+##################################################
+if 'pygmalion' in shared.model_name.lower():
+
+name1 = "You"
+
+prompt = generate_chat_prompt(text, max_new_tokens, name1, name2, context, chat_prompt_size, impersonate=True)
+
+reply = ''
+
+# Yield *Is typing...*
+
+yield shared.processing_message
+
+for i in range(chat_generation_attempts):
 ##################################################
 #+end_example

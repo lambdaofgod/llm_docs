@@ -1,4 +1,4 @@
-import index_utils
+from umbertobot import index_utils
 from pathlib import Path as P
 from itertools import islice
 from llama_index import Document
@@ -19,16 +19,21 @@ import tiktoken
 from dataclasses import dataclass
 from typing import List, Optional
 import os
-from langchain.document_loaders import ReadTheDocsLoader, DirectoryLoader
+from langchain.document_loaders import (
+    ReadTheDocsLoader,
+    DirectoryLoader,
+    PDFMinerLoader,
+)
 
 
 logging.basicConfig(level="INFO")
 
-supported_loader_types = ["rtdocs", "html", "text_files"]
+supported_loader_types = ["rtdocs", "html", "text_files", "csv", "parquet"]
 
 from pydantic import BaseModel, Field
 
 
+from umbertobot.loaders import PandasLoader
 import yaml
 from pydantic import BaseModel, Field
 
@@ -39,14 +44,24 @@ def load_model_from_yaml(base_model_cls, yaml_path):
     return base_model_cls.parse_obj(raw_obj)
 
 
+def load_or_get_default(base_model_cls, yaml_path):
+    if yaml_path:
+        return load_model_from_yaml(base_model_cls, yaml_path)
+    else:
+        return base_model_cls.get_default()
+
+
 class LoaderConfig(BaseModel):
 
     path: str
     loader_type: str
     glob_pattern: str = Field(default="**/*")
+    text_col: Optional[str] = Field(default=None)
 
     def get_index_name(self):
-        return f"{P(self.path).name}-{self.loader_type}"
+        pathname = P(self.path)
+        clean_pathname = pathname.name.replace(pathname.suffix, "")
+        return f"{clean_pathname}-{self.loader_type}"
 
 
 def strip_html_whitespaces(html_str):
@@ -61,7 +76,13 @@ def load_html_docs(path):
         yield doc
 
 
-def load_raw_docs(path, loader_type: str = "rtdocs", glob_pattern="**/*"):
+def load_raw_docs(
+    path,
+    loader_type: str = "rtdocs",
+    text_col: Optional[str] = None,
+    glob_pattern="**/*",
+    **kwargs,
+):
     """
     TODO: what is actual return type? Is this list by default or
     """
@@ -72,6 +93,8 @@ def load_raw_docs(path, loader_type: str = "rtdocs", glob_pattern="**/*"):
         return load_html_docs(path)
     elif loader_type == "text_files":
         return DirectoryLoader(path, glob=glob_pattern).load()
+    elif loader_type in ["parquet", "csv"]:
+        return PandasLoader(path, text_col, loader_type).load()
 
 
 # langchain_loader = ReadTheDocsLoader("rtdocs/langchain.readthedocs.io/en/latest/")
@@ -144,6 +167,9 @@ class DocStoreBuilder(BaseModel):
         self, documents, collection_name, persistence_config
     ):
         embeddings = self.embedding_config.load_embeddings()
+        persist_path = P(persistence_config.persist_directory)
+        if not persist_path.exists():
+            persist_path.mkdir(parents=True)
         with catchtime():
             doc_store = Chroma.from_documents(
                 self.filter_texts(documents),
@@ -160,6 +186,7 @@ class DocStoreBuilder(BaseModel):
             loader_config.path,
             loader_config.loader_type,
             glob_pattern=loader_config.glob_pattern,
+            text_col=loader_config.text_col,
         )
         docs = preprocess_docs(raw_docs, self.preprocessing_config)
         return self.make_doc_store_from_documents(
@@ -176,57 +203,5 @@ class DocStoreBuilder(BaseModel):
         # else:
         return self.setup_doc_store(loader_config, persistence_config)
 
-    # def check_if_exists(self, loader_config: LoaderConfig):
-    #     qdrant_client = index_utils.get_default_qdrant_client()
-    #     return loader_config.get_index_name() in qdrant_client.get_collections()
-
     def filter_texts(self, documents):
         return [doc for doc in documents]
-
-
-class Main:
-    @staticmethod
-    def index_with_chroma(
-        path,
-        loader_type,
-        glob_pattern=None,
-        collection_name=None,
-        persist_directory="vectordb",
-        embedding_config_path: str = "embedding_config.yaml",
-        preprocessing_config_path: str = "preprocessing_config.yaml",
-    ):
-        embedding_config = load_model_from_yaml(EmbeddingConfig, embedding_config_path)
-        preprocessing_config = load_model_from_yaml(
-            PreprocessingConfig, preprocessing_config_path
-        )
-        loader_config = LoaderConfig(
-            path=path, loader_type=loader_type, glob_pattern=glob_pattern or "**/*"
-        )
-        persistence_settings = PersistenceConfig(
-            collection_name=collection_name or loader_config.get_index_name(),
-            persist_directory=persist_directory,
-        )
-        builder = DocStoreBuilder(
-            embedding_config=embedding_config,
-            preprocessing_config=preprocessing_config,
-            persistence_config=persistence_settings,
-        )
-        logging.info(f"loader config{loader_config.get_index_name()}")
-        # if builder.check_if_exists(loader_config):
-        #     logging.info("skipping building, {loader_config.get_index_name()} exists")
-        # else:
-        logging.info(f"building doc store from {loader_config.get_index_name()}")
-        logging.info(f"using {embedding_config.embedding_model_name} model")
-        doc_store = builder.setup_doc_store(loader_config, persistence_settings)
-        logging.info("built doc store")
-        doc_store.persist()
-
-
-if __name__ == "__main__":
-    fire.Fire(Main())
-
-# for doc in doc_store.similarity_search("What are key concepts of llamaindex?"):
-#     print(doc.page_content)
-#     print()
-
-# docs[0].page_content
