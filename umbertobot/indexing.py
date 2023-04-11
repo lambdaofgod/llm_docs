@@ -1,41 +1,28 @@
-from umbertobot import index_utils
 from pathlib import Path as P
-from itertools import islice
-from llama_index import Document
-from langchain.embeddings import HuggingFaceEmbeddings
 from langchain.vectorstores import Qdrant, Chroma
-from langchain.llms import OpenAI
-from langchain.chains import VectorDBQA
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.document_loaders import UnstructuredHTMLLoader
 import re
-import tqdm
-
+from langchain.embeddings import HuggingFaceEmbeddings
+import shutil
+from contextlib import contextmanager
+from time import perf_counter
+from typing import Optional
 import logging
-import fire
 from pydantic import BaseModel, Field
-import pandas as pd
-import tiktoken
-from dataclasses import dataclass
-from typing import List, Optional
-import os
 from langchain.document_loaders import (
     ReadTheDocsLoader,
     DirectoryLoader,
     PDFMinerLoader,
 )
-
+import tqdm
+import yaml
+from umbertobot.loaders import PandasLoader
+from umbertobot.index_utils import update_qdrant_alias
 
 logging.basicConfig(level="INFO")
 
-supported_loader_types = ["rtdocs", "html", "text_files", "csv", "parquet"]
-
-from pydantic import BaseModel, Field
-
-
-from umbertobot.loaders import PandasLoader
-import yaml
-from pydantic import BaseModel, Field
+supported_loader_types = ["rtdocs", "html", "text_files", "csv", "parquet", "pdf"]
 
 
 def load_model_from_yaml(base_model_cls, yaml_path):
@@ -51,6 +38,36 @@ def load_or_get_default(base_model_cls, yaml_path):
         return base_model_cls.get_default()
 
 
+class EmbeddingConfig(BaseModel):
+
+    embedding_model_name: str
+    timeout: int
+
+    @staticmethod
+    def get_default():
+        return EmbeddingConfig(
+            embedding_model_name="sentence-transformers/all-mpnet-base-v2", timeout=180
+        )
+
+    def load_embeddings(self):
+        return HuggingFaceEmbeddings(model_name=self.embedding_model_name)
+
+
+class PreprocessingConfig(BaseModel):
+
+    chunk_size: int
+    chunk_overlap: int
+
+    @staticmethod
+    def get_default():
+        return PreprocessingConfig(chunk_size=512, chunk_overlap=128)
+
+
+class PersistenceConfig(BaseModel):
+    persist_directory: str
+    collection_name: Optional[str]
+
+
 class LoaderConfig(BaseModel):
 
     path: str
@@ -61,7 +78,7 @@ class LoaderConfig(BaseModel):
     def get_index_name(self):
         pathname = P(self.path)
         clean_pathname = pathname.name.replace(pathname.suffix, "")
-        return f"{clean_pathname}-{self.loader_type}"
+        return f"{clean_pathname}-{self.loader_type}".lower()
 
 
 def strip_html_whitespaces(html_str):
@@ -95,6 +112,8 @@ def load_raw_docs(
         return DirectoryLoader(path, glob=glob_pattern).load()
     elif loader_type in ["parquet", "csv"]:
         return PandasLoader(path, text_col, loader_type).load()
+    elif loader_type == "pdf":
+        return PDFMinerLoader(path).load()
 
 
 # langchain_loader = ReadTheDocsLoader("rtdocs/langchain.readthedocs.io/en/latest/")
@@ -102,31 +121,6 @@ def load_raw_docs(
 # llama_path = "rtdocs/gpt-index.readthedocs.io/en/latest"
 
 # docs = llama_loader.load()
-
-
-class EmbeddingConfig(BaseModel):
-
-    embedding_model_name: str
-    timeout: int
-
-    @staticmethod
-    def get_default():
-        return EmbeddingConfig(
-            embedding_model_name="sentence-transformers/all-mpnet-base-v2", timeout=180
-        )
-
-    def load_embeddings(self):
-        return HuggingFaceEmbeddings(model_name=self.embedding_model_name)
-
-
-class PreprocessingConfig(BaseModel):
-
-    chunk_size: int
-    chunk_overlap: int
-
-    @staticmethod
-    def get_default():
-        return PreprocessingConfig(chunk_size=512, chunk_overlap=128)
 
 
 def preprocess_docs(
@@ -142,15 +136,6 @@ def preprocess_docs(
     return (doc for doc in documents if len(doc.page_content) > min_char_length)
 
 
-class PersistenceConfig(BaseModel):
-    persist_directory: str
-    collection_name: Optional[str]
-
-
-from time import perf_counter
-from contextlib import contextmanager
-
-
 @contextmanager
 def catchtime() -> float:
     start = perf_counter()
@@ -164,8 +149,9 @@ class DocStoreBuilder(BaseModel):
     embedding_config: EmbeddingConfig
 
     def make_doc_store_from_documents(
-        self, documents, collection_name, persistence_config
+        self, documents, collection_name, persistence_config: PersistenceConfig
     ):
+        logging.info(f"building a docstore using {str(persistence_config)}")
         embeddings = self.embedding_config.load_embeddings()
         persist_path = P(persistence_config.persist_directory)
         if not persist_path.exists():
@@ -178,6 +164,30 @@ class DocStoreBuilder(BaseModel):
                 persist_directory=persistence_config.persist_directory,
             )
         return doc_store
+
+    def _make_qdrant_doc_store(
+        self, documents, embeddings, collection_name, persistence_config
+    ):
+        with catchtime():
+            qdrant_path = (
+                P(persistence_config.persist_directory)
+                / "qdrant"
+                / persistence_config.collection_name
+            )
+            if qdrant_path.exists():
+                logging.info(
+                    f"index persistence path exist, removing {str(qdrant_path)}"
+                )
+                shutil.rmtree(qdrant_path)
+            qdrant_path.mkdir(parents=True)
+            doc_store = Qdrant.from_documents(
+                self.filter_texts(documents),
+                embeddings,
+                distance_func=persistence_config.distance_func,
+                path=str(qdrant_path),
+            )
+            update_qdrant_alias(doc_store.client, collection_name)
+            return doc_store
 
     def setup_doc_store(
         self, loader_config: LoaderConfig, persistence_config: PersistenceConfig

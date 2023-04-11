@@ -1,0 +1,253 @@
+#+title: Pdf
+
+
+
+#+BEGIN_SRC python :session pdf.org  :exports both
+import qdrant_client
+from langchain.chains import VectorDBQA
+from langchain.vectorstores import Qdrant
+
+"qdrant"
+#+END_SRC
+
+#+RESULTS:
+: qdrant
+
+
+#+BEGIN_SRC python :session pdf.org  :exports both
+from configs import load_model_from_yaml, EmbeddingConfig
+import qdrant_client
+
+
+embedding_config = load_model_from_yaml(EmbeddingConfig, "conf/embedding_config.yaml")
+embedding_model = embedding_config.load_embeddings()
+
+def get_qdrant_doc_store_from_disk(path, embedding_model):
+    qdrant = qdrant_client.QdrantClient(path=path)
+    collection_names = list(qdrant._client.collections)
+    assert len(list(collection_names)) == 1, str(collection_names)
+    collection_name = collection_names[0]
+    return Qdrant(qdrant, collection_name=collection_name, embedding_function=embedding_model.embed_query)
+
+path = "vectordb/qdrant/rasa_book"
+#qdrant_store = get_qdrant_doc_store_from_disk(path, embedding_model)
+#+END_SRembed_documents
+
+#+RESULTS:
+
+#+BEGIN_SRC python :session pdf.org  :exports both
+vectorstore = get_qdrant_doc_store_from_disk(path, embedding_model)
+#+END_SRC
+
+#+RESULTS:
+
+#+BEGIN_SRC python :session pdf.org  :exports both
+vectorstore.similarity_search("How to Rasa")
+#+END_SRC
+
+#+RESULTS:
+| Document | (page_content= We hope that you got a lot out of this book. If you worked all the way through it, which is \nnot easy, you should now consider yourself an expert in Rasa. All we can say is thank you \nvery much for reading!\n\n\x0cPackt.com\n\nSubscribe to our online digital library for full access to over 7,000 books and videos, as \nwell as industry leading tools to help you plan your personal development and advance \nyour career. For more information, please visit our website.\n\nWhy subscribe? metadata= (source : docs/Conversational_AI_with_Rasa.pdf)) | Document | (page_content= This book will be of great use for anyone starting out as a Rasa developer, and I'm sure \nmany existing Rasa developers will discover things they didn't know. \n\nAlan Nichol\n\nCo-founder and CTO, Rasa\n\n\x0cContributors metadata= (source : docs/Conversational_AI_with_Rasa.pdf)) | Document | (page_content= 174     Working Principles and Customization of Rasa\n\nDoing the inference process metadata= (source : docs/Conversational_AI_with_Rasa.pdf)) | Document | (page_content= Training models\n\nWe will use the command-line tool that comes with Rasa for model training. The specific \nsteps are as follows. Open a command-line Terminal in the project directory and enter the \nfollowing command:\n\nrasa train\n\nAfter waiting for the completion of the command, the training of the model is over. The \nnewly generated model file will be located in the models directory under the project \ndirectory.\n\nIn the next section, we will use Rasa's own tools to start the service and make inferences. metadata= (source : docs/Conversational_AI_with_Rasa.pdf)) |
+
+#+BEGIN_SRC python :session pdf.org  :exports both
+from langchain import VectorDBQA, OpenAI
+from pathlib import Path
+api_key_path = Path('~/.keys/openai_key.txt').expanduser() # specify file path if OPENAI_API_KEY is not in env
+with open(api_key_path) as f:
+    api_key = f.read().strip()
+llm = OpenAI(openai_api_key=api_key)
+
+qa = VectorDBQA.from_chain_type(
+    llm=llm,
+    chain_type="stuff",
+    vectorstore=vectorstore,
+    return_source_documents=False,
+    k=5
+)
+"qa"
+#+END_SRC
+
+#+RESULTS:
+: qa
+
+#+BEGIN_SRC python :session pdf.org  :exports both
+q = "How to write a deterministic dialog flow in rasa?"
+qa.run(q)
+#+END_SRC
+
+#+RESULTS:
+:  You can write a deterministic dialog flow in Rasa by using the RulePolicy feature. You need to add the RulePolicy into the configuration file, and then define the form for the dialogue system. When the form is complete, the process will iterate until the bot starts to execute the specific task.
+
+#+BEGIN_SRC python :session pdf.org  :exports both :results output
+import pprint
+for d in qa._get_docs(q):
+    print(pprint.pprint(dict(d)))
+#+END_SRC
+
+#+RESULTS:
+#+begin_example
+{'metadata': {'source': 'docs/Conversational_AI_with_Rasa.pdf'},
+ 'page_content': 'The dialogue management module runs in a similar way to '
+                 'training a model. It constantly \n'
+                 'tracks the dialogue state and provides features to the '
+                 'relevant policy. The policy predicts \n'
+                 'and runs actions until the action is to wait for user input '
+                 '(ActionListen) or the \n'
+                 'maximum number of actions is exceeded (to avoid deadlocks).\n'
+                 '\n'
+                 '\x0c'
+                 '180     Working Principles and Customization of Rasa'}
+None
+{'metadata': {'source': 'docs/Conversational_AI_with_Rasa.pdf'},
+ 'page_content': 'missing field.\n'
+                 '\n'
+                 '6.  The process iterates until bot finds that the form is '
+                 'complete and starts to execute \n'
+                 '\n'
+                 'the specific task.\n'
+                 '\n'
+                 'We need to add RulePolicy into the configuration file so '
+                 'that Rasa can handle dialogue \n'
+                 'management based on forms:\n'
+                 '\n'
+                 'policies:\n'
+                 '\xa0\xa0- name: RulePolicy\n'
+                 '\n'
+                 "Let's now start to discuss how to define a form."}
+None
+{'metadata': {'source': 'docs/Conversational_AI_with_Rasa.pdf'},
+ 'page_content': 'on only one domain. Since the Rasa framework is designed for '
+                 'single-domain dialogue \n'
+                 'systems, it does not include the domain classification '
+                 'feature. In this book, we will focus \n'
+                 'on how to implement a single-domain dialogue system by using '
+                 'Rasa.'}
+None
+{'metadata': {'source': 'docs/Conversational_AI_with_Rasa.pdf'},
+ 'page_content': 'In interactive learning mode, Rasa will print out the '
+                 'current conversation state for the user \n'
+                 'to observe before predicting the next action. Then, Rasa '
+                 'will provide the current predicted \n'
+                 'next action and ask the user to confirm whether it is '
+                 'correct. We can choose Y or n, as \n'
+                 'shown in Figure 10.5:\n'
+                 '\n'
+                 'Figure 10.5 – Rasa printing out the current conversation '
+                 'state and waiting for confirmation\n'
+                 '\n'
+                 '\x0c'
+                 '212     Conversation-Driven Development and Interactive '
+                 'Learning'}
+None
+{'metadata': {'source': 'docs/Conversational_AI_with_Rasa.pdf'},
+ 'page_content': 'Now we have finished the training job, in the next section, '
+                 'we will run the whole  \n'
+                 'dialogue system.\n'
+                 '\n'
+                 'Running the dialogue system\n'
+                 'For running the whole dialogue system, we need to run three '
+                 'separate servers: Rasa \n'
+                 "server, action server, and web client server. Let's see each "
+                 'of them in detail: \n'
+                 '\n'
+                 '•  Rasa server \n'
+                 '\n'
+                 'To run the server, use the following command:\n'
+                 '\n'
+                 'rasa run --cors "*"\n'
+                 '\n'
+                 'The --cors "*" command is used to solve the cross-origin '
+                 'resource sharing \n'
+                 '(CORS) problem between client and Rasa servers.'}
+None
+{'metadata': {'source': 'docs/Conversational_AI_with_Rasa.pdf'},
+ 'page_content': 'Each dialogue history can be categorized into two types of '
+                 'events: ActionExecuted \n'
+                 'events and non-ActionExecuted events. The ActionExecuted '
+                 'event is the \n'
+                 'execution of a Rasa action, represented as a gray circle. '
+                 'The Non-ActionExecuted \n'
+                 'event is for all events except ActionExecuted events, which '
+                 'are represented by \n'
+                 'white circles. Every time an ActionExecuted event is '
+                 'encountered, a prior tracker is \n'
+                 'generated. Figure 8.1 is just a simplified demonstration, '
+                 'and in a real scenario, Rasa will'}
+None
+{'metadata': {'source': 'docs/Conversational_AI_with_Rasa.pdf'},
+ 'page_content': 'In Rasa Core, these functions have all been integrated, and '
+                 "users can use Rasa's dialogue \n"
+                 'management functions in an end-to-end machine learning-based '
+                 'manner. After reading \n'
+                 'this chapter, you should be able to understand the '
+                 "components of Rasa's dialogue \n"
+                 'management system, including domain, story, action, slot, '
+                 'and policy. You should be \n'
+                 'able to define your own custom actions and understand how '
+                 'Rasa communicates with \n'
+                 'instant messaging software. And finally, you should be able '
+                 'to develop simple chatbots.'}
+None
+{'metadata': {'source': 'docs/Conversational_AI_with_Rasa.pdf'},
+ 'page_content': 'Summary\n'
+                 'In this chapter, we discussed two very important stages in '
+                 'the development of a Dialogue \n'
+                 'system: testing and deployment. Testing is very important '
+                 'for us to ensure the intelligence \n'
+                 'of a Dialogue system. We must find the current problems of '
+                 'the Dialogue system through \n'
+                 'testing and correct these problems. We also discussed how to '
+                 'deploy Rasa projects to \n'
+                 'production environments. A real large-scale Dialogue system '
+                 'needs to be accessed by tens'}
+None
+{'metadata': {'source': 'docs/Conversational_AI_with_Rasa.pdf'},
+ 'page_content': 'Evaluating Dialogue management models\n'
+                 '\n'
+                 'It is easy to evaluate the performance of Dialogue '
+                 'management in Rasa. As you may have \n'
+                 'guessed, you can use the command-line tool, as follows:\n'
+                 '\n'
+                 'rasa test core --stories test_stories.yml --out results\n'
+                 '\n'
+                 'In this command, the test_stories.yml file contains the test '
+                 'stories. The reports \n'
+                 'will output to the results directory. All the failed stories '
+                 'will output to the results/\n'
+                 'failed_test_stories.yml file.\n'
+                 '\n'
+                 '\x0c'
+                 '196     Testing and Production Deployment'}
+None
+{'metadata': {'source': 'docs/Conversational_AI_with_Rasa.pdf'},
+ 'page_content': 'In the next chapter, we will take a deeper look at how to '
+                 'handle business logic effectively \n'
+                 'in Rasa.\n'
+                 '\n'
+                 '\x0c'
+                 '\x0c'
+                 'Section 2:  \n'
+                 'Rasa in Action\n'
+                 '\n'
+                 'In this section, you will learn how to use the functions '
+                 'provided by the Rasa framework \n'
+                 'to build different types of chatbots. You will also learn '
+                 'how to create and use custom \n'
+                 'components. Through hands-on examples, you will gain '
+                 'practical experience in handling \n'
+                 'various dialogue tasks.\n'
+                 '\n'
+                 'This section comprises the following chapters: \n'
+                 '\n'
+                 '•  Chapter 4, Handling Business Logic'}
+None
+#+end_example
+
+[[id:785de6c2-47e6-46f5-aab6-f2133389bbc6][python/qdrant]]
+
+#+BEGIN_SRC python :session pdf.org  :exports both
+q = "How does deterministic rule policy work in Rasa?"
+qa.run(q)
+#+END_SRC
+
+#+RESULTS:
+:  In Rasa, deterministic rule policies are based on a set of rules that map conditions to actions. The conditions are formulated using context features, such as the intent, entities, slots, and conversation history, and the action that is chosen is determined by the most specific rule that matches the given context features.
