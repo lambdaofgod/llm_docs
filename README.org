@@ -1,0 +1,8 @@
+#+title: umbertobot
+
+How to run
+#+BEGIN_SRC bash
+python -m umbertobot <doc_path_or_dir> <loader_type> [text_col]
+#+END_SRC
+
+To change embedding/preprocessing pass embedding/preprocessing config path, see `conf` dir for examples
