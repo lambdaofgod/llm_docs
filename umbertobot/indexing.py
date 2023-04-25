@@ -7,7 +7,7 @@ from langchain.embeddings import HuggingFaceEmbeddings
 import shutil
 from contextlib import contextmanager
 from time import perf_counter
-from typing import Optional
+from typing import Optional, List
 import logging
 from pydantic import BaseModel, Field
 from langchain.document_loaders import (
@@ -17,7 +17,7 @@ from langchain.document_loaders import (
 )
 import tqdm
 import yaml
-from umbertobot.loaders import PandasLoader
+from umbertobot.loaders import PandasLoader, get_directory_loader
 from umbertobot.index_utils import update_qdrant_alias
 
 logging.basicConfig(level="INFO")
@@ -41,7 +41,7 @@ def load_or_get_default(base_model_cls, yaml_path):
 class EmbeddingConfig(BaseModel):
 
     embedding_model_name: str
-    timeout: int
+    timeout: int = Field(default=60)
 
     @staticmethod
     def get_default():
@@ -51,6 +51,12 @@ class EmbeddingConfig(BaseModel):
 
     def load_embeddings(self):
         return HuggingFaceEmbeddings(model_name=self.embedding_model_name)
+
+    @staticmethod
+    def load_from_yaml(yaml_path):
+        with open(yaml_path, "r") as f:
+            config = yaml.safe_load(f)
+        return EmbeddingConfig(**config)
 
 
 class PreprocessingConfig(BaseModel):
@@ -74,6 +80,8 @@ class LoaderConfig(BaseModel):
     loader_type: str
     glob_pattern: str = Field(default="**/*")
     text_col: Optional[str] = Field(default=None)
+    included_cols: Optional[List[str]] = Field(default_factory=list)
+    gitignore_path: Optional[str] = Field(default=None)
 
     def get_index_name(self):
         pathname = P(self.path)
@@ -93,25 +101,26 @@ def load_html_docs(path):
         yield doc
 
 
-def load_raw_docs(
-    path,
-    loader_type: str = "rtdocs",
-    text_col: Optional[str] = None,
-    glob_pattern="**/*",
-    **kwargs,
-):
+def load_raw_docs(loader_config: LoaderConfig):
     """
     TODO: what is actual return type? Is this list by default or
     """
+    loader_type = loader_config.loader_type
+    path = loader_config.path
+    glob_pattern = loader_config.glob_pattern
+    text_col = loader_config.text_col
+
     assert loader_type in supported_loader_types
     if loader_type == "rtdocs":
         return ReadTheDocsLoader(path).load()
     elif loader_type == "html":
         return load_html_docs(path)
     elif loader_type == "text_files":
-        return DirectoryLoader(path, glob=glob_pattern).load()
+        return get_directory_loader(
+            path, glob=glob_pattern, gitignore_path=loader_config.gitignore_path
+        ).load()
     elif loader_type in ["parquet", "csv"]:
-        return PandasLoader(path, text_col, loader_type).load()
+        return PandasLoader(path, text_col, loader_type, included_cols).load()
     elif loader_type == "pdf":
         return PDFMinerLoader(path).load()
 
@@ -192,12 +201,7 @@ class DocStoreBuilder(BaseModel):
     def setup_doc_store(
         self, loader_config: LoaderConfig, persistence_config: PersistenceConfig
     ):
-        raw_docs = load_raw_docs(
-            loader_config.path,
-            loader_config.loader_type,
-            glob_pattern=loader_config.glob_pattern,
-            text_col=loader_config.text_col,
-        )
+        raw_docs = load_raw_docs(loader_config)
         docs = preprocess_docs(raw_docs, self.preprocessing_config)
         return self.make_doc_store_from_documents(
             docs,

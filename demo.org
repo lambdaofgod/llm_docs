@@ -1,0 +1,161 @@
+#+title: Demo
+
+* Text documents example
+
+Put some text documents (or code for that matter) in `text_docs`
+
+#+BEGIN_SRC bash
+python -m umbertobot index text_docs text_files
+#+END_SRC
+
+#+RESULTS:
+| Running    | Chroma   | using   | direct | local   | API.      |          |      |      |        |          |
+| No         | existing | DB      | found  | in      | vectordb, | skipping | load |      |        |          |
+| No         | existing | DB      | found  | in      | vectordb, | skipping | load |      |        |          |
+| Time:      | 1.522    | seconds |        |         |           |          |      |      |        |          |
+| Persisting | DB       | to      | disk,  | putting | it        | in       | the  | save | folder | vectordb |
+
+
+#+BEGIN_SRC python :session querying.org  :exports both
+from umbertobot.semantic_search import get_semantic_search_engine
+from umbertobot.indexing import EmbeddingConfig
+
+vectordb = get_semantic_search_engine("text_docs-text_files", "vectordb", embedding_config=EmbeddingConfig.get_default())
+#+END_SRC
+
+#+RESULTS:
+
+#+BEGIN_SRC python :session querying.org  :exports both
+vectordb = Chroma(collection_name="text_docs-text_files", embedding_function=embedding, client_settings=chroma_settings)
+#+END_SRC
+
+#+RESULTS:
+
+#+BEGIN_SRC python :session querying.org  :exports both :results output
+for doc in (vectordb.similarity_search("document SimpleDirectory")):
+    print(doc.page_content)
+    print("#" * 50)
+#+END_SRC
+
+#+RESULTS:
+#+begin_example
+Batches:   0% 0/1 [00:00<?, ?it/s]Batches: 100% 1/1 [00:00<00:00, 32.99it/s]
+DEBUG:Chroma:time to pre process our knn query: 9.5367431640625e-07
+DEBUG:Chroma:time to run knn query: 5.125999450683594e-05
+import pandas as pd
+
+,#+END_SRC
+
+,#+RESULTS:
+
+OpenAI
+
+,#+BEGIN_SRC python :session indexing.org  :exports both
+
+import os
+
+with open(P("~/.keys/openai_key.txt").expanduser()) as f:
+
+os.environ["OPENAI_API_KEY"] = f.read().strip()
+
+,#+END_SRC
+
+,#+RESULTS:
+
+Document loading utils
+
+,#+BEGIN_SRC python :session indexing.org  :exports both
+
+#documents = SimpleDirectoryReader('data').load_data()
+
+def get_document_paths(dir, glob_pattern="*"):
+
+return list(P(dir).expanduser().glob(glob_pattern))
+##################################################
+import pandas as pd
+
+,#+END_SRC
+
+,#+RESULTS:
+
+OpenAI
+
+,#+BEGIN_SRC python :session indexing.org  :exports both
+
+import os
+
+with open(P("~/.keys/openai_key.txt").expanduser()) as f:
+
+os.environ["OPENAI_API_KEY"] = f.read().strip()
+
+,#+END_SRC
+
+,#+RESULTS:
+
+Document loading utils
+
+,#+BEGIN_SRC python :session indexing.org  :exports both
+
+#documents = SimpleDirectoryReader('data').load_data()
+
+def get_document_paths(dir, glob_pattern="*"):
+
+return list(P(dir).expanduser().glob(glob_pattern))
+##################################################
+def get_document_paths(dir, glob_pattern="*"):
+
+return list(P(dir).expanduser().glob(glob_pattern))
+
+def load_documents_with_paths(paths):
+
+for p in paths:
+
+with open(p) as f:
+
+contents = f.read().strip()
+
+yield p, contents
+
+def load_documents_df(paths):
+
+l = list(load_documents_with_paths(paths))
+
+return pd.DataFrame.from_records(l, columns=["path", "contents"])
+
+def get_roam_chunks(doc):
+
+all_lines = doc.split("\n")
+
+last_org_line_index = 0
+
+for l in all_lines:
+##################################################
+def get_document_paths(dir, glob_pattern="*"):
+
+return list(P(dir).expanduser().glob(glob_pattern))
+
+def load_documents_with_paths(paths):
+
+for p in paths:
+
+with open(p) as f:
+
+contents = f.read().strip()
+
+yield p, contents
+
+def load_documents_df(paths):
+
+l = list(load_documents_with_paths(paths))
+
+return pd.DataFrame.from_records(l, columns=["path", "contents"])
+
+def get_roam_chunks(doc):
+
+all_lines = doc.split("\n")
+
+last_org_line_index = 0
+
+for l in all_lines:
+##################################################
+#+end_example
