@@ -16,7 +16,7 @@ python -m umbertobot index text_docs text_files
 | Persisting | DB       | to      | disk,  | putting | it        | in       | the  | save | folder | vectordb |
 
 
-#+BEGIN_SRC python :session querying.org  :exports both
+#+BEGIN_SRC python :session demo.org  :exports both
 from umbertobot.semantic_search import get_semantic_search_engine
 from umbertobot.indexing import EmbeddingConfig
 
@@ -25,13 +25,13 @@ vectordb = get_semantic_search_engine("text_docs-text_files", "vectordb", embedd
 
 #+RESULTS:
 
-#+BEGIN_SRC python :session querying.org  :exports both
+#+BEGIN_SRC python :session demo.org  :exports both
 vectordb = Chroma(collection_name="text_docs-text_files", embedding_function=embedding, client_settings=chroma_settings)
 #+END_SRC
 
 #+RESULTS:
 
-#+BEGIN_SRC python :session querying.org  :exports both :results output
+#+BEGIN_SRC python :session demo.org  :exports both :results output
 for doc in (vectordb.similarity_search("document SimpleDirectory")):
     print(doc.page_content)
     print("#" * 50)
@@ -39,9 +39,9 @@ for doc in (vectordb.similarity_search("document SimpleDirectory")):
 
 #+RESULTS:
 #+begin_example
-Batches:   0% 0/1 [00:00<?, ?it/s]Batches: 100% 1/1 [00:00<00:00, 32.99it/s]
-DEBUG:Chroma:time to pre process our knn query: 9.5367431640625e-07
-DEBUG:Chroma:time to run knn query: 5.125999450683594e-05
+Batches:   0%|                                                                                                        | 0/1 [00:00<?, ?it/s]Batches: 100%|███████████████████████████████████████████████████████████████████████████████████████████████| 1/1 [00:00<00:00, 118.68it/s]
+DEBUG:Chroma:time to pre process our knn query: 7.152557373046875e-07
+DEBUG:Chroma:time to run knn query: 5.6743621826171875e-05
 import pandas as pd
 
 ,#+END_SRC
@@ -101,34 +101,6 @@ Document loading utils
 def get_document_paths(dir, glob_pattern="*"):
 
 return list(P(dir).expanduser().glob(glob_pattern))
-##################################################
-def get_document_paths(dir, glob_pattern="*"):
-
-return list(P(dir).expanduser().glob(glob_pattern))
-
-def load_documents_with_paths(paths):
-
-for p in paths:
-
-with open(p) as f:
-
-contents = f.read().strip()
-
-yield p, contents
-
-def load_documents_df(paths):
-
-l = list(load_documents_with_paths(paths))
-
-return pd.DataFrame.from_records(l, columns=["path", "contents"])
-
-def get_roam_chunks(doc):
-
-all_lines = doc.split("\n")
-
-last_org_line_index = 0
-
-for l in all_lines:
 ##################################################
 def get_document_paths(dir, glob_pattern="*"):
 
@@ -159,3 +131,11 @@ last_org_line_index = 0
 for l in all_lines:
 ##################################################
 #+end_example
+
+
+#+BEGIN_SRC python :session demo.org  :exports both :async
+doc
+#+END_SRC
+
+#+RESULTS:
+: page_content='def get_document_paths(dir, glob_pattern="*"):\n\nreturn list(P(dir).expanduser().glob(glob_pattern))\n\ndef load_documents_with_paths(paths):\n\nfor p in paths:\n\nwith open(p) as f:\n\ncontents = f.read().strip()\n\nyield p, contents\n\ndef load_documents_df(paths):\n\nl = list(load_documents_with_paths(paths))\n\nreturn pd.DataFrame.from_records(l, columns=["path", "contents"])\n\ndef get_roam_chunks(doc):\n\nall_lines = doc.split("\\n")\n\nlast_org_line_index = 0\n\nfor l in all_lines:' lookup_str='' metadata={'source': 'text_docs/indexing.org'} lookup_index=0

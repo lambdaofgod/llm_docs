@@ -19,6 +19,13 @@ import tqdm
 import yaml
 from umbertobot.loaders import PandasLoader, get_directory_loader
 from umbertobot.index_utils import update_qdrant_alias
+from umbertobot.models import (
+    EmbeddingConfig,
+    PreprocessingConfig,
+    LoaderConfig,
+    PersistenceConfig,
+    IndexType,
+)
 
 logging.basicConfig(level="INFO")
 
@@ -36,57 +43,6 @@ def load_or_get_default(base_model_cls, yaml_path):
         return load_model_from_yaml(base_model_cls, yaml_path)
     else:
         return base_model_cls.get_default()
-
-
-class EmbeddingConfig(BaseModel):
-
-    embedding_model_name: str
-    timeout: int = Field(default=60)
-
-    @staticmethod
-    def get_default():
-        return EmbeddingConfig(
-            embedding_model_name="sentence-transformers/all-mpnet-base-v2", timeout=180
-        )
-
-    def load_embeddings(self):
-        return HuggingFaceEmbeddings(model_name=self.embedding_model_name)
-
-    @staticmethod
-    def load_from_yaml(yaml_path):
-        with open(yaml_path, "r") as f:
-            config = yaml.safe_load(f)
-        return EmbeddingConfig(**config)
-
-
-class PreprocessingConfig(BaseModel):
-
-    chunk_size: int
-    chunk_overlap: int
-
-    @staticmethod
-    def get_default():
-        return PreprocessingConfig(chunk_size=512, chunk_overlap=128)
-
-
-class PersistenceConfig(BaseModel):
-    persist_directory: str
-    collection_name: Optional[str]
-
-
-class LoaderConfig(BaseModel):
-
-    path: str
-    loader_type: str
-    glob_pattern: str = Field(default="**/*")
-    text_col: Optional[str] = Field(default=None)
-    included_cols: Optional[List[str]] = Field(default_factory=list)
-    gitignore_path: Optional[str] = Field(default=None)
-
-    def get_index_name(self):
-        pathname = P(self.path)
-        clean_pathname = pathname.name.replace(pathname.suffix, "")
-        return f"{clean_pathname}-{self.loader_type}".lower()
 
 
 def strip_html_whitespaces(html_str):
